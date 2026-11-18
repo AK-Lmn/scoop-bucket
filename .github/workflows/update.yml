@@ -113,7 +113,7 @@ jobs:
     needs: [candidate, test]
     if: needs.candidate.outputs.changed == 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 35
     permissions:
       contents: write
       pull-requests: write
@@ -126,14 +126,14 @@ jobs:
           GH_TOKEN: ${{ secrets.SCOOP_BUCKET_AUTOMATION_TOKEN }}
         run: |
           if [[ -z "$GH_TOKEN" ]]; then
-            echo "::error::Set SCOOP_BUCKET_AUTOMATION_TOKEN with contents:write and pull-requests:write access to this repository"
+            echo "::error::Set SCOOP_BUCKET_AUTOMATION_TOKEN with contents:write, pull-requests:write, and checks:read access to this repository"
             exit 1
           fi
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: manifest
           path: bucket
-      - name: Open an auto-merge pull request
+      - name: Open and merge a pull request after required checks pass
         env:
           VERSION: ${{ needs.candidate.outputs.version }}
           GH_TOKEN: ${{ secrets.SCOOP_BUCKET_AUTOMATION_TOKEN }}
@@ -151,8 +151,9 @@ jobs:
             cat >"$body_file" <<'EOF'
           Fixes #2 and #6.
 
-          Update the Scoop manifest to the latest tested Flisk release. GEL checks run on this pull request before auto-merge.
+          Update the Scoop manifest to the latest tested Flisk release. GEL checks run on this pull request before it merges.
           EOF
             pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head automation/update-flisk-manifest --title "chore(scoop): update Flisk manifest to $VERSION" --body-file "$body_file")"
           fi
-          gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash "$pr_url"
+          gh pr checks --repo "$GITHUB_REPOSITORY" --required --watch "$pr_url"
+          gh pr merge --repo "$GITHUB_REPOSITORY" --squash "$pr_url"
